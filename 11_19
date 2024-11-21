@@ -42,9 +42,9 @@ long prev_encoder_A = 0;
 long prev_encoder_B = 0;
 
 const int IMG_WIDTH_HALF = 64;
-const int BASE_SPEED = 70;
-const float KP = 4.0;
-const float KD = 0.2;
+const int BASE_SPEED = 100;
+const float KP = 3.5;
+const float KD = 0.4;
 float error_old = 0.0;
 
 #define FASTADC 1
@@ -58,20 +58,24 @@ int pulses_per_rev = 360;
 int mission_flag = 0;
 int function_flag = 0;
 
-struct Waypoint {
+struct Waypoint 
+{
   double distance;
   double heading_angle;
 };
 
-Waypoint waypoints[20];
+Waypoint waypoints[8];
 int waypoint_no = 0;
 
-void setup() {
-  reset_encoder();
+void setup() 
+{
+  reset_encoder();               
+  reset_IMU();                   
   MsTimer2::set(20, MsTimer2_ISR);
   MsTimer2::start();
 
-  for (int i = 0; i < NPIXELS; i++) {
+  for (int i = 0; i < NPIXELS; i++) 
+  {
     LineSensor_Data[i] = 0;
     LineSensor_Data_Adaption[i] = 0;
     MAX_LineSensor_Data[i] = 1023;
@@ -97,26 +101,30 @@ void setup() {
 
   Serial.begin(115200);
 
-  waypoints[0] = {0, 0};             // 시작점(정지)
-  waypoints[1] = {2 * Grid_Size, 0}; // 두 칸 직진
-  waypoints[2] = {0, 90};            // 오른쪽 90도 회전
-  waypoints[3] = {3 * Grid_Size, 90}; // 세 칸 직진
-  waypoints[4] = {0, 0};             // 정지
-  waypoints[5] = {0, -90};           // 왼쪽 90도 회전
-  waypoints[6] = {1 * Grid_Size, -90}; // 한 칸 직진 
-  waypoints[7] = {0, -90}; // 마지막에 왼쪽 90도 회전
-
+  waypoints[0] = {0, 0};            
+  waypoints[1] = {2 * Grid_Size, 0};
+  waypoints[2] = {0, 90};  
+  waypoints[3] = {1 * Grid_Size, 0};  
+  waypoints[4] = {2 * Grid_Size, 0};
+  waypoints[5] = {0, 0};             
+  waypoints[6] = {0, -90};         
+  waypoints[7] = {1 * Grid_Size, 0}; 
+  waypoints[8] = {0, -90};
 }
 
-void reset_encoder() {
+
+void reset_encoder() 
+{
   encoder_A_pulse = 0;
   encoder_B_pulse = 0;
   prev_encoder_A = 0;
   prev_encoder_B = 0;
 }
 
-void MsTimer2_ISR() {
-  switch (function_flag) {
+void MsTimer2_ISR() 
+{
+  switch (function_flag) 
+  {
     case 1:
       line_tracer();
       break;
@@ -130,33 +138,49 @@ void MsTimer2_ISR() {
   }
 }
 
-void motor_l(int speed) {
-  if (speed >= 0) {
+void motor_l(int speed) 
+{
+  if (speed >= 0) 
+  {
     digitalWrite(IN1, LOW);
     digitalWrite(IN2, HIGH);
     analogWrite(ENA, speed);
-  } else {
+  } 
+  else 
+  {
     digitalWrite(IN1, HIGH);
     digitalWrite(IN2, LOW);
     analogWrite(ENA, -speed);
   }
 }
 
-void motor_r(int speed) {
-  if (speed >= 0) {
+void motor_r(int speed) 
+{
+  if (speed >= 0) 
+  {
     digitalWrite(IN3, LOW);
     digitalWrite(IN4, HIGH);
     analogWrite(ENB, speed);
-  } else {
+  } 
+  else 
+  {
     digitalWrite(IN3, HIGH);
     digitalWrite(IN4, LOW);
     analogWrite(ENB, -speed);
   }
 }
 
-void motor_control(int left_motor_speed, int right_motor_speed) {
+void motor_control(int left_motor_speed, int right_motor_speed) 
+{
   motor_l(left_motor_speed);
   motor_r(right_motor_speed);
+}
+
+void reset_IMU() {
+  compass.init(); 
+  delay(100);     
+  compass.read(); 
+  Serial.println("IMU has been reset.");
 }
 
 void read_line_camera(void)
@@ -178,14 +202,14 @@ void read_line_camera(void)
   digitalWrite(CLKpin, LOW);
 }
 
-void update_robot_distance() {
+void update_robot_distance() 
+{
   long delta_A = encoder_A_pulse - prev_encoder_A;
   long delta_B = encoder_B_pulse - prev_encoder_B;
 
   float avg_pulse = (delta_A + delta_B) / 2.0;
   robot_distance += (avg_pulse / pulses_per_rev) * wheel_circumference;
 
-  // 디버깅 출력
   Serial.print("Distance: ");
   Serial.println(robot_distance);
 
@@ -194,7 +218,8 @@ void update_robot_distance() {
 }
 
 
-void yaw_control() {
+void yaw_control() 
+{
   float error_yaw_d;
   int l_motor_speed;
   int r_motor_speed;
@@ -268,7 +293,8 @@ void line_control(int line_center)
   error_old = error;
 }
 
-void line_tracer() {
+void line_tracer() 
+{
   double cx = 64;
   read_line_camera();
   threshold_line_image(150);
@@ -280,81 +306,63 @@ void loop()
 {
   switch (mission_flag)
   {
-    case 0: // 초기화 상태
+    case 0: 
       motor_control(0, 0);
       delay(500);
-      robot_distance = 0.0;  // 로봇 거리 초기화
-      function_flag = 1;  // 라인 트레이서로 전환
-      mission_flag = 1;   // 거리 제어 미션으로 전환
+      reset_encoder();
+      robot_distance = 0.0;
+      reset_IMU(); 
+      function_flag = 1; 
+      mission_flag = 1;
       break;
 
-    case 1: // 거리 제어
-      if (robot_distance >= waypoints[waypoint_no].distance) {  // 목표 거리 도달 시
-        function_flag = 3; // 정지
-        delay(500);        // 정지 후 대기
-        target_yaw = waypoints[waypoint_no].heading_angle - compass.heading(); // 목표 각도 설정
-        function_flag = 2; // 회전 제어로 전환
-        mission_flag = 2;  // 회전 미션으로 전환
-        waypoint_no++;     // 다음 웨이포인트로 이동
+    case 1:
+      if (robot_distance >= waypoints[waypoint_no].distance)
+      {
+        function_flag = 3; 
+        delay(500);
+        reset_IMU(); 
+        target_yaw = waypoints[waypoint_no].heading_angle; 
+        function_flag = 2; 
+        mission_flag = 2;
+      }
+      else
+      {
+        line_tracer(); 
       }
       break;
 
-    case 2: // 회전 제어
-      yaw_control(); // 각도 조정
-      if (error_yaw < 3 && error_yaw > -3) {  // 목표 각도에 도달했을 경우
-        function_flag = 3; // 정지
+    case 2: 
+      yaw_control(); 
+      if (abs(error_yaw) < 3) 
+      {
+        function_flag = 3; 
         delay(500);
         reset_encoder();
-        mission_flag = 3;  // 다음 미션으로 전환
+        mission_flag = 3;
       }
       break;
 
-    case 3: // 거리 제어
-      if (robot_distance >= waypoints[waypoint_no].distance) {  // 목표 거리 도달 시
-        function_flag = 3; // 정지
-        delay(500);        // 정지 후 대기
-        target_yaw = waypoints[waypoint_no].heading_angle - compass.heading(); // 목표 각도 설정
-        function_flag = 2; // 회전 제어로 전환
-        mission_flag = 4;  // 회전 미션으로 전환
-        waypoint_no++;     // 다음 웨이포인트로 이동
+    case 3: 
+      motor_control(0, 0);
+      delay(500);
+      reset_encoder();
+      robot_distance = 0.0;
+      reset_IMU(); 
+
+      waypoint_no++;
+      if (waypoint_no < sizeof(waypoints) / sizeof(waypoints[0]))
+      {
+        mission_flag = 0; 
+      }
+      else
+      {
+        mission_flag = 4; 
       }
       break;
 
-    case 4: // 회전 제어 2
-      yaw_control(); // 각도 조정
-      if (error_yaw < 3 && error_yaw > -3) {  // 목표 각도에 도달했을 경우
-        function_flag = 3; // 정지
-        delay(500);
-        reset_encoder();
-        mission_flag = 5;  // 다음 미션으로 전환
-      }
-      break;
-
-    case 5: // 거리 제어
-      if (robot_distance >= waypoints[waypoint_no].distance) {  // 목표 거리 도달 시
-        function_flag = 3; // 정지
-        delay(500);        // 정지 후 대기
-        target_yaw = waypoints[waypoint_no].heading_angle - compass.heading(); // 목표 각도 설정
-        function_flag = 2; // 회전 제어로 전환
-        mission_flag = 6;  // 회전 미션으로 전환
-        waypoint_no++;     // 다음 웨이포인트로 이동
-      }
-      break;
-
-    case 6: // 왼쪽 90도 마지막 회전
-      yaw_control(); // 각도 조정
-      if (error_yaw < 3 && error_yaw > -3) {  // 목표 각도에 도달했을 경우
-        function_flag = 3; // 정지
-        delay(500);
-        mission_flag = 7; // 종료 상태로 전환
-      }
-      break;
-
-    case 7: // 종료 상태
-      motor_control(0, 0);  // 로봇 정지
+    case 4: 
+      motor_control(0, 0); 
       break;
   }
 }
-
-
-
