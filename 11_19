@@ -43,8 +43,8 @@ long prev_encoder_B = 0;
 
 const int IMG_WIDTH_HALF = 64;
 const int BASE_SPEED = 100;
-const float KP = 3.5;
-const float KD = 0.4;
+const float KP = 4.5;
+const float KD = 0.5;
 float error_old = 0.0;
 
 #define FASTADC 1
@@ -64,7 +64,7 @@ struct Waypoint
   double heading_angle;
 };
 
-Waypoint waypoints[8];
+Waypoint waypoints[9];
 int waypoint_no = 0;
 
 void setup() 
@@ -322,7 +322,7 @@ void loop()
         function_flag = 3; 
         delay(500);
         reset_IMU(); 
-        target_yaw = waypoints[waypoint_no].heading_angle; 
+        target_yaw =  waypoints[waypoint_no].heading_angle + compass.heading(); 
         function_flag = 2; 
         mission_flag = 2;
       }
